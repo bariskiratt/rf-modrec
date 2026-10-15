@@ -36,6 +36,8 @@ def inference_ms_per_frame(model, length: int, device, batch: int = 256, reps: i
         model(x)
     if device.type == "cuda":
         torch.cuda.synchronize()
+    elif device.type == "mps":
+        torch.mps.synchronize()
     return (time.perf_counter() - t0) / (reps * batch) * 1e3
 
 

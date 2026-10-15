@@ -41,3 +41,17 @@ def test_train_runs_and_learns(tmp_path):
     # 8 classes -> chance is 0.125; a few epochs on tiny data should clear 2x chance.
     assert m["accuracy_by_snr"][20] > 0.25
     assert (tmp_path / "accuracy_vs_snr.png").exists()
+
+
+def test_dataset_pickles_memmap_as_path(tmp_path):
+    # Spawned DataLoader workers (macOS) unpickle the dataset; it must not carry the array.
+    import pickle
+
+    np.save(tmp_path / "x.npy", np.random.randn(64, 2, 1024).astype(np.float32))
+    np.save(tmp_path / "y.npy", np.zeros(64, dtype=np.int64))
+    np.save(tmp_path / "snr.npy", np.zeros(64, dtype=np.int64))
+    ds = data.IQDataset(data.load_prepared(tmp_path), np.arange(64))
+    blob = pickle.dumps(ds)
+    assert len(blob) < 64 * 2 * 1024 * 4 / 4
+    back = pickle.loads(blob)
+    assert torch.equal(back[3][0], ds[3][0])

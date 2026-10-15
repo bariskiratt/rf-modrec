@@ -11,7 +11,7 @@ class/SNR-balanced subset into .npy files once; training then memory-maps them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -109,6 +109,19 @@ class IQDataset(Dataset):
         self.split = split
         self.indices = indices
         self.normalize = normalize
+
+    def __getstate__(self):
+        # DataLoader workers on macOS and Windows are spawned and get a pickled copy of
+        # the dataset. A pickled memmap carries the whole array, so send the path instead.
+        state = self.__dict__.copy()
+        if isinstance(self.split.x, np.memmap):
+            state["split"] = replace(self.split, x=str(self.split.x.filename))
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if isinstance(self.split.x, str):
+            self.split = replace(self.split, x=np.load(self.split.x, mmap_mode="r"))
 
     def __len__(self) -> int:
         return len(self.indices)

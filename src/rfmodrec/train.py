@@ -38,10 +38,18 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def pick_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():  # Apple silicon GPU
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def main(argv=None) -> dict:
     args = parse_args(argv)
     torch.manual_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = pick_device()
 
     if args.synthetic:
         split, classes = synthetic.generate(seed=args.seed), synthetic.SYNTH_CLASSES

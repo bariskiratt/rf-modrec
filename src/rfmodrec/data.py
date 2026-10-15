@@ -11,7 +11,7 @@ class/SNR-balanced subset into .npy files once; training then memory-maps them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -91,32 +91,42 @@ def load_prepared(data_dir: str | Path) -> Split:
 def stratified_split(
     split: Split, val: float = 0.1, test: float = 0.2, seed: int = 0
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Index arrays for train/val/test, stratified on (class, SNR)."""
-    rng = np.random.default_rng(seed)
-    key = split.y * 1000 + (split.snr + 100)
-    tr, va, te = [], [], []
-    for k in np.unique(key):
-        idx = rng.permutation(np.flatnonzero(key == k))
-        n_te, n_va = int(len(idx) * test), int(len(idx) * val)
-        te.append(idx[:n_te])
-        va.append(idx[n_te : n_te + n_va])
-        tr.append(idx[n_te + n_va :])
-    return np.concatenate(tr), np.concatenate(va), np.concatenate(te)
+    """Index arrays (train, val, test) into `split`, stratified on (class, SNR).
+
+    Every (class, SNR) pair should land in all three parts in the same proportions,
+    otherwise accuracy-vs-SNR curves compare different class mixes. The three arrays
+    must be disjoint and together cover every index.
+    """
+    raise NotImplementedError("week 2-3")
 
 
 class IQDataset(Dataset):
+    """Frames `split.x[indices]` as (x, label, snr) tuples for a DataLoader.
+
+    x is a float32 tensor of shape (2, L). With `normalize`, scale each frame to unit
+    average power so the model cannot use the receive gain as a shortcut.
+    """
+
     def __init__(self, split: Split, indices: np.ndarray, normalize: bool = True):
         self.split = split
         self.indices = indices
         self.normalize = normalize
 
+    def __getstate__(self):
+        # DataLoader workers on macOS and Windows are spawned and get a pickled copy of
+        # the dataset. A pickled memmap carries the whole array, so send the path instead.
+        state = self.__dict__.copy()
+        if isinstance(self.split.x, np.memmap):
+            state["split"] = replace(self.split, x=str(self.split.x.filename))
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if isinstance(self.split.x, str):
+            self.split = replace(self.split, x=np.load(self.split.x, mmap_mode="r"))
+
     def __len__(self) -> int:
-        return len(self.indices)
+        raise NotImplementedError("week 2-3")
 
     def __getitem__(self, i: int):
-        j = self.indices[i]
-        x = np.asarray(self.split.x[j], dtype=np.float32)
-        if self.normalize:
-            # Unit average power per frame; removes gain as a shortcut feature.
-            x = x / np.sqrt(np.mean(x**2) * 2 + 1e-12)
-        return torch.from_numpy(x), int(self.split.y[j]), int(self.split.snr[j])
+        raise NotImplementedError("week 2-3")

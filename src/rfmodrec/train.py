@@ -38,59 +38,54 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def pick_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():  # Apple silicon GPU
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def make_loaders(split, tr, va, te, args) -> tuple[DataLoader, DataLoader, DataLoader]:
+    """DataLoaders over data.IQDataset for the train, val and test indices.
+
+    Only the training loader should shuffle. Use args.batch_size and args.workers.
+    """
+    raise NotImplementedError("week 3")
+
+
+def fit(model, train_dl, val_dl, args, device, out: Path) -> tuple[float, list[dict]]:
+    """Train `model` and return (best validation accuracy, per-epoch history).
+
+    Each epoch: one pass over train_dl, then validation accuracy on val_dl.
+    Save the weights to out / "best.pt" whenever validation accuracy improves, and
+    stop early after args.patience epochs without improvement. A history entry
+    should look like {"epoch": 3, "train_loss": 1.23, "val_acc": 0.45}.
+    """
+    raise NotImplementedError("week 3")
+
+
 def main(argv=None) -> dict:
     args = parse_args(argv)
     torch.manual_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = pick_device()
 
     if args.synthetic:
         split, classes = synthetic.generate(seed=args.seed), synthetic.SYNTH_CLASSES
     else:
         split, classes = data.load_prepared(args.data), data.RADIOML_2018_CLASSES
     tr, va, te = data.stratified_split(split, seed=args.seed)
-    loader = lambda idx, shuffle: DataLoader(  # noqa: E731
-        data.IQDataset(split, idx),
-        batch_size=args.batch_size,
-        shuffle=shuffle,
-        num_workers=args.workers,
-    )
-    train_dl, val_dl, test_dl = loader(tr, True), loader(va, False), loader(te, False)
+    train_dl, val_dl, test_dl = make_loaders(split, tr, va, te, args)
 
     length = split.x.shape[-1]
     model = models.build(args.model, len(classes), length).to(device)
     n_params = sum(p.numel() for p in model.parameters())
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
-    loss_fn = nn.CrossEntropyLoss()
 
     out = args.out or Path("runs") / f"{args.model}-{time.strftime('%Y%m%d-%H%M%S')}"
     out.mkdir(parents=True, exist_ok=True)
     print(f"{args.model}: {n_params:,} params, {len(tr)}/{len(va)}/{len(te)} frames, {device}")
 
-    best, stale, history = -1.0, 0, []
-    for epoch in range(1, args.epochs + 1):
-        model.train()
-        t0, total = time.time(), 0.0
-        for x, y, _ in train_dl:
-            x, y = x.to(device), y.to(device)
-            opt.zero_grad()
-            loss = loss_fn(model(x), y)
-            loss.backward()
-            opt.step()
-            total += loss.item() * len(y)
-        sched.step()
-        pred, y, _ = evaluate.predict(model, val_dl, device)
-        val_acc = float((pred == y).mean())
-        history.append({"epoch": epoch, "train_loss": total / len(tr), "val_acc": val_acc})
-        print(f"epoch {epoch:3d}  loss {total / len(tr):.4f}  val_acc {val_acc:.4f}  {time.time() - t0:.0f}s")
-        if val_acc > best:
-            best, stale = val_acc, 0
-            torch.save(model.state_dict(), out / "best.pt")
-        else:
-            stale += 1
-            if stale >= args.patience:
-                print("early stop")
-                break
+    best, history = fit(model, train_dl, val_dl, args, device, out)
 
     (out / "history.json").write_text(json.dumps(history, indent=2))
     model.load_state_dict(torch.load(out / "best.pt", map_location=device))

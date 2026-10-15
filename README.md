@@ -3,7 +3,9 @@
 Classify the modulation of a raw I/Q radio frame (24 classes, -20 to +30 dB SNR) and
 compare three model families on accuracy, low-SNR robustness, and inference cost.
 
-> Status: project skeleton. Results tables below are filled in as experiments run.
+> Status: project skeleton. The models, dataset, split and training loop are stubs I am
+> writing myself (see PLAN.md); `pytest` is their acceptance test. Results tables below
+> are filled in as experiments run.
 
 ## Why this problem
 

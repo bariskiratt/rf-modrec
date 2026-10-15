@@ -54,4 +54,4 @@ def test_dataset_pickles_memmap_as_path(tmp_path):
     blob = pickle.dumps(ds)
     assert len(blob) < 64 * 2 * 1024 * 4 / 4
     back = pickle.loads(blob)
-    assert torch.equal(back[3][0], ds[3][0])
+    assert np.array_equal(back.split.x[3], ds.split.x[3])

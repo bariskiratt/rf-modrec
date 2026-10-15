@@ -11,19 +11,17 @@ import torch
 from sklearn.metrics import confusion_matrix
 
 
-@torch.no_grad()
 def predict(model, loader, device) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    model.eval()
-    preds, ys, snrs = [], [], []
-    for x, y, snr in loader:
-        preds.append(model(x.to(device)).argmax(1).cpu().numpy())
-        ys.append(y.numpy())
-        snrs.append(snr.numpy())
-    return np.concatenate(preds), np.concatenate(ys), np.concatenate(snrs)
+    """Run `model` over `loader` and return (predicted labels, true labels, snr) as numpy.
+
+    Remember eval mode and that no gradients are needed here.
+    """
+    raise NotImplementedError("week 3")
 
 
 def accuracy_by_snr(pred, y, snr) -> dict[int, float]:
-    return {int(s): float((pred[snr == s] == y[snr == s]).mean()) for s in np.unique(snr)}
+    """{snr_db: accuracy over the frames at that SNR}, for every SNR present."""
+    raise NotImplementedError("week 3")
 
 
 @torch.no_grad()

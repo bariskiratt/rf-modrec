@@ -1,8 +1,11 @@
 """Three model families to compare. Input: (B, 2, L) I/Q, output: (B, num_classes) logits.
 
-- cnn:         VGG-style 1D CNN, after O'Shea, Roy & Clancy (2018).
-- resnet:      residual stacks from the same paper.
+- cnn:         VGG-style 1D CNN, after O'Shea, Roy & Clancy (2018), Table III.
+- resnet:      residual stacks from the same paper, Table IV.
 - transformer: patch embedding + Transformer encoder.
+
+All three are left for me to implement. `tests/test_smoke.py::test_model_shapes`
+passes once each returns (B, num_classes) logits for a (B, 2, 1024) input.
 """
 
 from __future__ import annotations
@@ -12,74 +15,43 @@ from torch import nn
 
 
 class CNN(nn.Module):
+    """Stack of Conv1d -> BatchNorm1d -> ReLU -> MaxPool1d blocks, then a small MLP head.
+
+    The paper uses 7 conv blocks (64 filters, kernel 3) and halves the length after each,
+    so 1024 samples become 8 before the head.
+    """
+
     def __init__(self, num_classes: int, width: int = 64, blocks: int = 7):
         super().__init__()
-        layers, c_in = [], 2
-        for _ in range(blocks):
-            layers += [
-                nn.Conv1d(c_in, width, 3, padding=1),
-                nn.BatchNorm1d(width),
-                nn.ReLU(inplace=True),
-                nn.MaxPool1d(2),
-            ]
-            c_in = width
-        self.features = nn.Sequential(*layers)
-        self.head = nn.Sequential(
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-            nn.Linear(width, 128),
-            nn.SELU(),
-            nn.AlphaDropout(0.3),
-            nn.Linear(128, num_classes),
-        )
+        raise NotImplementedError("week 3: CNN baseline")
 
     def forward(self, x):
-        return self.head(self.features(x))
-
-
-class _ResUnit(nn.Module):
-    def __init__(self, c: int):
-        super().__init__()
-        self.body = nn.Sequential(
-            nn.Conv1d(c, c, 3, padding=1), nn.BatchNorm1d(c), nn.ReLU(inplace=True),
-            nn.Conv1d(c, c, 3, padding=1), nn.BatchNorm1d(c),
-        )
-
-    def forward(self, x):
-        return torch.relu(x + self.body(x))
-
-
-class _ResStack(nn.Module):
-    def __init__(self, c_in: int, c: int):
-        super().__init__()
-        self.proj = nn.Conv1d(c_in, c, 1)
-        self.units = nn.Sequential(_ResUnit(c), _ResUnit(c))
-        self.pool = nn.MaxPool1d(2)
-
-    def forward(self, x):
-        return self.pool(self.units(self.proj(x)))
+        raise NotImplementedError
 
 
 class ResNet(nn.Module):
+    """Residual stacks: 1x1 conv to `width` channels, two residual units, MaxPool1d(2).
+
+    A residual unit is conv -> BN -> ReLU -> conv -> BN, added back to its input
+    before the final ReLU. The paper uses 6 stacks of 32 filters.
+    """
+
     def __init__(self, num_classes: int, width: int = 32, stacks: int = 6):
         super().__init__()
-        self.stacks = nn.Sequential(
-            *[_ResStack(2 if i == 0 else width, width) for i in range(stacks)]
-        )
-        self.head = nn.Sequential(
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-            nn.Linear(width, 128),
-            nn.SELU(),
-            nn.AlphaDropout(0.3),
-            nn.Linear(128, num_classes),
-        )
+        raise NotImplementedError("week 5: ResNet")
 
     def forward(self, x):
-        return self.head(self.stacks(x))
+        raise NotImplementedError
 
 
 class Transformer(nn.Module):
+    """Cut the (2, L) frame into L // patch patches, embed each to `dim`, prepend a
+    learned [CLS] token, add learned position embeddings, run nn.TransformerEncoder,
+    classify from the [CLS] output.
+
+    Hint: a Conv1d with kernel_size = stride = patch is a patch embedding.
+    """
+
     def __init__(
         self,
         num_classes: int,
@@ -90,21 +62,10 @@ class Transformer(nn.Module):
         heads: int = 4,
     ):
         super().__init__()
-        self.embed = nn.Conv1d(2, dim, patch, stride=patch)
-        self.cls = nn.Parameter(torch.zeros(1, 1, dim))
-        self.pos = nn.Parameter(torch.randn(1, length // patch + 1, dim) * 0.02)
-        layer = nn.TransformerEncoderLayer(
-            dim, heads, dim * 4, dropout=0.1, batch_first=True, norm_first=True
-        )
-        self.encoder = nn.TransformerEncoder(layer, depth, enable_nested_tensor=False)
-        self.norm = nn.LayerNorm(dim)
-        self.head = nn.Linear(dim, num_classes)
+        raise NotImplementedError("week 6: Transformer")
 
     def forward(self, x):
-        t = self.embed(x).transpose(1, 2)
-        t = torch.cat([self.cls.expand(len(t), -1, -1), t], dim=1) + self.pos
-        t = self.encoder(t)
-        return self.head(self.norm(t[:, 0]))
+        raise NotImplementedError
 
 
 MODELS = {"cnn": CNN, "resnet": ResNet, "transformer": Transformer}
